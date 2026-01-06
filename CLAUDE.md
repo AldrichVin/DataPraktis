@@ -1,0 +1,137 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+**DataPraktis** is a niche marketplace connecting Indonesian SMBs with data analysts. Businesses post projects using guided templates, get matched with vetted analysts, and pay via milestone-based escrow.
+
+## Tech Stack
+
+- **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS
+- **Backend**: Next.js API routes (Phase 1), NestJS (Phase 2+)
+- **Database**: PostgreSQL with Prisma ORM
+- **Auth**: NextAuth.js (credentials + Google OAuth)
+- **Payments**: Midtrans (Indonesian payment gateway)
+- **File Storage**: AWS S3 with signed URLs
+- **Monorepo**: Turborepo with npm workspaces
+
+## Commands
+
+```bash
+# Install all dependencies
+npm install
+
+# Development
+npm run dev                    # Run all apps in dev mode
+npm run dev --filter=web       # Run only frontend
+
+# Database
+npm run db:generate            # Generate Prisma client
+npm run db:push                # Push schema to database
+npm run db:studio              # Open Prisma Studio
+
+# Build & Lint
+npm run build                  # Build all packages
+npm run lint                   # Lint all packages
+npm run format                 # Format with Prettier
+```
+
+## Project Structure
+
+```
+datapraktis/
+├── apps/
+│   └── web/                   # Next.js frontend
+│       ├── src/app/           # App Router pages
+│       │   ├── (auth)/        # Login, register
+│       │   ├── api/           # API routes
+│       │   └── ...
+│       ├── src/components/    # React components
+│       │   └── ui/            # shadcn/ui components
+│       └── src/lib/           # Utilities, auth config
+│
+├── packages/
+│   ├── db/                    # Prisma schema & client
+│   │   └── prisma/schema.prisma
+│   └── types/                 # Shared TypeScript types
+```
+
+## Architecture
+
+### Database Schema (Core Entities)
+
+- **User**: Both clients and analysts, with `role` field
+- **AnalystProfile**: Extended profile for analysts (skills, ratings, bank info)
+- **Template**: Guided project templates with questions, suggested budgets
+- **Project**: Client's data project (linked to template, files, milestones)
+- **Proposal**: Analyst's bid on a project
+- **Milestone**: Project phases with payment amounts and status
+- **Transaction**: Escrow payments via Midtrans
+- **Conversation/Message**: In-app messaging
+
+### Auth Flow
+
+1. Users register as CLIENT or ANALYST via `/register`
+2. Analysts go through `/onboarding/analyst` to complete profile
+3. JWT-based sessions via NextAuth
+4. Role-based access in middleware and API routes
+
+### Payment Flow (Midtrans)
+
+1. Client hires analyst → frontend calls API to create transaction
+2. API creates Midtrans order → returns payment token
+3. Client pays via Midtrans popup (bank transfer, e-wallet)
+4. Midtrans webhook updates transaction status to ESCROWED
+5. Client approves milestone → funds released (minus 10% commission)
+
+## Key Patterns
+
+### API Routes
+
+All API routes in `apps/web/src/app/api/` follow this pattern:
+
+```typescript
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    // Validate with Zod
+    // Business logic with Prisma
+    return NextResponse.json({ success: true, data });
+  } catch (error) {
+    // Handle Zod errors, Prisma errors, etc.
+    return NextResponse.json({ error: 'message' }, { status: 400 });
+  }
+}
+```
+
+### UI Components
+
+Using shadcn/ui pattern - components in `src/components/ui/` with:
+- Radix UI primitives
+- Tailwind styling via `class-variance-authority`
+- `cn()` utility for class merging
+
+### Currency
+
+All amounts in IDR (Indonesian Rupiah) stored as integers (no decimals). Use `formatCurrency()` from `@/lib/utils` for display.
+
+## Environment Variables
+
+Required in `apps/web/.env`:
+
+```
+DATABASE_URL          # PostgreSQL connection string
+NEXTAUTH_URL          # http://localhost:3000 for dev
+NEXTAUTH_SECRET       # Random 32+ char secret
+GOOGLE_CLIENT_ID      # Optional for Google OAuth
+GOOGLE_CLIENT_SECRET  # Optional for Google OAuth
+```
+
+## Development Notes
+
+- Indonesian language (Bahasa) for all user-facing text
+- Amounts always in IDR, format with `Rp X.XXX.XXX`
+- 10% commission taken from analyst payout, not added to client price
+- Files encrypted at rest, accessible only after hiring
+- Auto-delete files 90 days after project completion

@@ -1,0 +1,477 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  CLIENT
+  ANALYST
+  ADMIN
+}
+
+enum ProjectStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  REVISION_REQUESTED
+  APPROVED
+  DISPUTED
+}
+
+enum TransactionStatus {
+  PENDING
+  ESCROWED
+  RELEASED
+  REFUNDED
+  FAILED
+}
+
+enum FileAccessLevel {
+  PUBLIC_PREVIEW    // Watermarked preview for proposals
+  HIRED_ONLY        // Full access after hiring
+  DELIVERABLE       // Analyst-uploaded deliverable
+}
+
+// ============================================================================
+// USER & PROFILES
+// ============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  name          String?
+  image         String?
+  phone         String?
+  role          UserRole  @default(CLIENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  analystProfile  AnalystProfile?
+  clientProjects  Project[]        @relation("ClientProjects")
+  proposals       Proposal[]
+  uploadedFiles   ProjectFile[]
+  sentMessages    Message[]        @relation("SentMessages")
+  receivedReviews Review[]         @relation("ReceivedReviews")
+  givenReviews    Review[]         @relation("GivenReviews")
+  conversations   ConversationParticipant[]
+  accounts        Account[]
+  sessions        Session[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model AnalystProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  bio                String?  @db.Text
+  headline           String?  // Short tagline
+  skills             String[] // Array of skill tags
+  hourlyRate         Int?     // In IDR
+  portfolioUrl       String?
+  linkedinUrl        String?
+
+  // Vetting
+  vetted             Boolean  @default(false)
+  vettedAt           DateTime?
+  vettingNotes       String?  @db.Text
+
+  // Stats (denormalized for performance)
+  rating             Float    @default(0)
+  totalReviews       Int      @default(0)
+  completedProjects  Int      @default(0)
+  responseTimeHours  Int?     // Average response time
+
+  // Banking
+  bankName           String?
+  bankAccountNumber  String?
+  bankAccountName    String?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([vetted])
+  @@index([rating])
+  @@index([skills])
+}
+
+// ============================================================================
+// TEMPLATES
+// ============================================================================
+
+model Template {
+  id                  String   @id @default(cuid())
+  name                String   // "Sales Analysis & Forecasting"
+  slug                String   @unique
+  description         String   @db.Text
+  category            String   // "analytics", "dashboard", "cleaning"
+  icon                String?  // Icon name or URL
+
+  // Guided questions (JSON schema)
+  questions           Json     // Array of question objects
+
+  // Pricing guidance
+  suggestedBudgetMin  Int      // In IDR
+  suggestedBudgetMax  Int
+
+  // Default milestones
+  defaultMilestones   Json     // Array of milestone templates
+
+  // Example deliverables (shown to clients)
+  exampleDeliverables Json     // Array of deliverable descriptions
+
+  isActive            Boolean  @default(true)
+  sortOrder           Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  projects Project[]
+
+  @@index([category])
+  @@index([isActive])
+}
+
+// ============================================================================
+// PROJECTS
+// ============================================================================
+
+model Project {
+  id              String        @id @default(cuid())
+  clientId        String
+  templateId      String?
+
+  title           String
+  description     String        @db.Text
+  templateAnswers Json?         // Answers to template questions
+
+  // Budget & Timeline
+  budgetMin       Int?          // In IDR
+  budgetMax       Int?
+  deadline        DateTime?
+
+  status          ProjectStatus @default(DRAFT)
+
+  // Matching
+  hiredAnalystId  String?
+  hiredAt         DateTime?
+  completedAt     DateTime?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  client          User          @relation("ClientProjects", fields: [clientId], references: [id])
+  template        Template?     @relation(fields: [templateId], references: [id])
+  files           ProjectFile[]
+  proposals       Proposal[]
+  milestones      Milestone[]
+  conversations   Conversation[]
+  transactions    Transaction[]
+  reviews         Review[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([templateId])
+  @@index([createdAt])
+}
+
+model ProjectFile {
+  id              String          @id @default(cuid())
+  projectId       String
+  uploaderId      String
+
+  filename        String
+  originalName    String
+  mimeType        String
+  size            Int             // In bytes
+  s3Key           String          // S3 object key
+
+  accessLevel     FileAccessLevel @default(HIRED_ONLY)
+
+  // For deliverables
+  milestoneId     String?
+
+  // Security
+  encryptedAt     DateTime        @default(now())
+  deletedAt       DateTime?       // Soft delete for 90-day retention
+
+  createdAt       DateTime        @default(now())
+
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploader        User            @relation(fields: [uploaderId], references: [id])
+  milestone       Milestone?      @relation(fields: [milestoneId], references: [id])
+
+  @@index([projectId])
+  @@index([milestoneId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// PROPOSALS & MILESTONES
+// ============================================================================
+
+model Proposal {
+  id              String         @id @default(cuid())
+  projectId       String
+  analystId       String
+
+  coverLetter     String         @db.Text
+  proposedBudget  Int            // In IDR
+  proposedDays    Int            // Estimated days to complete
+
+  // Proposed milestones (JSON array)
+  proposedMilestones Json
+
+  status          ProposalStatus @default(PENDING)
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  analyst         User           @relation(fields: [analystId], references: [id])
+
+  @@unique([projectId, analystId])
+  @@index([projectId])
+  @@index([analystId])
+  @@index([status])
+}
+
+model Milestone {
+  id              String          @id @default(cuid())
+  projectId       String
+
+  title           String
+  description     String          @db.Text
+  amount          Int             // In IDR
+  dueDate         DateTime?
+  sortOrder       Int             @default(0)
+
+  status          MilestoneStatus @default(PENDING)
+
+  // Revision tracking
+  revisionCount   Int             @default(0)
+  maxRevisions    Int             @default(2)
+
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deliverables    ProjectFile[]
+  transaction     Transaction?
+
+  @@index([projectId])
+  @@index([status])
+}
+
+// ============================================================================
+// MESSAGING
+// ============================================================================
+
+model Conversation {
+  id          String    @id @default(cuid())
+  projectId   String
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project      Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([projectId])
+}
+
+model ConversationParticipant {
+  id             String   @id @default(cuid())
+  conversationId String
+  userId         String
+
+  lastReadAt     DateTime?
+
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+
+  content        String   @db.Text
+  attachments    Json?    // Array of file references
+
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("SentMessages", fields: [senderId], references: [id])
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// PAYMENTS
+// ============================================================================
+
+model Transaction {
+  id              String            @id @default(cuid())
+  projectId       String
+  milestoneId     String?           @unique
+
+  amount          Int               // Total amount in IDR
+  platformFee     Int               // 10% commission
+  netAmount       Int               // Amount analyst receives
+
+  status          TransactionStatus @default(PENDING)
+
+  // Payment gateway
+  midtransOrderId String?           @unique
+  midtransToken   String?
+  paymentMethod   String?           // "bank_transfer", "gopay", etc.
+
+  // Timestamps
+  escrowedAt      DateTime?
+  releasedAt      DateTime?
+  refundedAt      DateTime?
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  project   Project    @relation(fields: [projectId], references: [id])
+  milestone Milestone? @relation(fields: [milestoneId], references: [id])
+
+  @@index([projectId])
+  @@index([status])
+  @@index([midtransOrderId])
+}
+
+model Withdrawal {
+  id              String   @id @default(cuid())
+  analystId       String
+
+  amount          Int      // In IDR
+  fee             Int      // Withdrawal fee if any
+  netAmount       Int      // Amount transferred
+
+  bankName        String
+  bankAccountNumber String
+  bankAccountName String
+
+  status          String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+
+  processedAt     DateTime?
+  completedAt     DateTime?
+  failureReason   String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([analystId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// REVIEWS
+// ============================================================================
+
+model Review {
+  id          String   @id @default(cuid())
+  projectId   String
+  reviewerId  String   // Who wrote the review
+  revieweeId  String   // Who received the review
+
+  rating      Int      // 1-5
+  comment     String?  @db.Text
+
+  // Specific ratings (optional)
+  qualityRating       Int? // 1-5
+  communicationRating Int? // 1-5
+  timelinessRating    Int? // 1-5
+
+  createdAt   DateTime @default(now())
+
+  project  Project @relation(fields: [projectId], references: [id])
+  reviewer User    @relation("GivenReviews", fields: [reviewerId], references: [id])
+  reviewee User    @relation("ReceivedReviews", fields: [revieweeId], references: [id])
+
+  @@unique([projectId, reviewerId])
+  @@index([revieweeId])
+  @@index([rating])
+}
