@@ -251,6 +251,14 @@ Located in `apps/web/src/components/workspace/`:
 - **FundMilestoneModal** - Payment prompt shown when accepting proposal
 - **MilestoneStatusBadge** - Visual status indicators (PENDING, FUNDED, IN_PROGRESS, etc.)
 - **AutoReleaseCountdown** - Shows 14-day countdown timer for client review
+- **MilestoneTimeline** - Vertical timeline with progress bar and status icons
+- **MilestoneTimelineHorizontal** - Compact horizontal timeline for lists
+
+## Project Components
+
+Located in `apps/web/src/components/projects/`:
+
+- **ProposalComparison** - Side-by-side proposal comparison table for clients
 
 ## Development Notes
 
