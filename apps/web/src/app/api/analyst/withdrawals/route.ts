@@ -26,8 +26,42 @@ export async function GET() {
       where: { userId: session.user.id },
     });
 
-    // Calculate available balance (released payments - completed withdrawals)
-    const releasedPayments = await prisma.transaction.aggregate({
+    const now = new Date();
+
+    // Calculate available balance (released payments with security hold check)
+    // Only funds with availableAt <= now are truly available
+    const availablePayments = await prisma.transaction.aggregate({
+      where: {
+        project: {
+          hiredAnalystId: session.user.id,
+        },
+        status: 'RELEASED',
+        OR: [
+          { availableAt: null }, // Legacy transactions without security hold
+          { availableAt: { lte: now } }, // Security hold has passed
+        ],
+      },
+      _sum: {
+        netAmount: true,
+      },
+    });
+
+    // Funds in security hold (released but not yet available)
+    const securityHoldPayments = await prisma.transaction.aggregate({
+      where: {
+        project: {
+          hiredAnalystId: session.user.id,
+        },
+        status: 'RELEASED',
+        availableAt: { gt: now }, // Still in security hold
+      },
+      _sum: {
+        netAmount: true,
+      },
+    });
+
+    // Total released (both available and in security hold)
+    const totalReleased = await prisma.transaction.aggregate({
       where: {
         project: {
           hiredAnalystId: session.user.id,
@@ -59,10 +93,24 @@ export async function GET() {
       },
     });
 
-    const totalEarnings = releasedPayments._sum.netAmount || 0;
+    const totalEarnings = totalReleased._sum.netAmount || 0;
+    const securityHold = securityHoldPayments._sum.netAmount || 0;
     const withdrawn = completedWithdrawals._sum.netAmount || 0;
-    const pending = pendingWithdrawals._sum.netAmount || 0;
-    const availableBalance = totalEarnings - withdrawn - pending;
+    const pendingWithdrawal = pendingWithdrawals._sum.netAmount || 0;
+    const availableBalance = (availablePayments._sum.netAmount || 0) - withdrawn - pendingWithdrawal;
+
+    // Get next security hold release date
+    const nextRelease = await prisma.transaction.findFirst({
+      where: {
+        project: {
+          hiredAnalystId: session.user.id,
+        },
+        status: 'RELEASED',
+        availableAt: { gt: now },
+      },
+      orderBy: { availableAt: 'asc' },
+      select: { availableAt: true, netAmount: true },
+    });
 
     // Get withdrawal history
     const withdrawals = await prisma.withdrawal.findMany({
@@ -77,8 +125,13 @@ export async function GET() {
         balance: {
           total: totalEarnings,
           withdrawn,
-          pending,
-          available: availableBalance,
+          pending: pendingWithdrawal, // Pending withdrawal requests
+          securityHold, // Funds in 5-day security hold
+          available: Math.max(0, availableBalance), // Ensure non-negative
+          nextRelease: nextRelease ? {
+            amount: nextRelease.netAmount,
+            availableAt: nextRelease.availableAt?.toISOString(),
+          } : null,
         },
         bankInfo: {
           bankName: analystProfile?.bankName,
@@ -129,13 +182,19 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { amount } = createWithdrawalSchema.parse(body);
 
-    // Calculate available balance
-    const releasedPayments = await prisma.transaction.aggregate({
+    const now = new Date();
+
+    // Calculate available balance (only funds past security hold)
+    const availablePayments = await prisma.transaction.aggregate({
       where: {
         project: {
           hiredAnalystId: session.user.id,
         },
         status: 'RELEASED',
+        OR: [
+          { availableAt: null }, // Legacy transactions
+          { availableAt: { lte: now } }, // Security hold passed
+        ],
       },
       _sum: {
         netAmount: true,
@@ -162,10 +221,9 @@ export async function POST(request: Request) {
       },
     });
 
-    const totalEarnings = releasedPayments._sum.netAmount || 0;
     const withdrawn = completedWithdrawals._sum.netAmount || 0;
     const pending = pendingWithdrawals._sum.netAmount || 0;
-    const availableBalance = totalEarnings - withdrawn - pending;
+    const availableBalance = (availablePayments._sum.netAmount || 0) - withdrawn - pending;
 
     if (amount > availableBalance) {
       return NextResponse.json(

@@ -53,20 +53,41 @@ export async function POST(request: Request) {
       );
     }
 
-    // Release the payment
-    await prisma.transaction.update({
-      where: { id: milestone.transaction.id },
-      data: {
-        status: 'RELEASED',
-        releasedAt: new Date(),
-      },
+    // Release the payment with 5-day security hold
+    const now = new Date();
+    const availableAt = new Date();
+    availableAt.setDate(availableAt.getDate() + 5); // 5-day security hold
+
+    await prisma.$transaction(async (tx) => {
+      // Update transaction with security hold
+      await tx.transaction.update({
+        where: { id: milestone.transaction!.id },
+        data: {
+          status: 'RELEASED',
+          releasedAt: now,
+          availableAt: availableAt, // Funds available after 5 days
+        },
+      });
+
+      // Update analyst balance
+      if (milestone.project.hiredAnalystId) {
+        await tx.analystProfile.update({
+          where: { userId: milestone.project.hiredAnalystId },
+          data: {
+            balance: { increment: milestone.transaction!.netAmount },
+            totalEarnings: { increment: milestone.transaction!.netAmount },
+          },
+        });
+      }
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Dana berhasil dicairkan ke analyst',
+      message: 'Dana berhasil dicairkan! Tersedia untuk penarikan dalam 5 hari.',
       data: {
         netAmount: milestone.transaction.netAmount,
+        availableAt: availableAt.toISOString(),
+        securityHoldDays: 5,
       },
     });
   } catch (error) {

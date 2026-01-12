@@ -21,6 +21,7 @@ import {
   Clock,
   CreditCard,
   Loader2,
+  Lock,
   Wallet,
 } from 'lucide-react';
 
@@ -34,7 +35,12 @@ interface Balance {
   total: number;
   withdrawn: number;
   pending: number;
+  securityHold: number;
   available: number;
+  nextRelease: {
+    amount: number;
+    availableAt: string;
+  } | null;
 }
 
 interface Withdrawal {
@@ -174,7 +180,7 @@ export default function EarningsPage() {
       </div>
 
       {/* Balance Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
@@ -200,8 +206,25 @@ export default function EarningsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
+              <Lock className="h-5 w-5 text-orange-600" />
+              <p className="text-sm text-muted-foreground">Security Hold</p>
+            </div>
+            <p className="text-2xl font-bold mt-2 text-orange-600">
+              {formatCurrency(balance?.securityHold || 0)}
+            </p>
+            {balance?.nextRelease && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {formatCurrency(balance.nextRelease.amount)} tersedia{' '}
+                {formatRelativeTime(balance.nextRelease.availableAt)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-yellow-600" />
-              <p className="text-sm text-muted-foreground">Dalam Proses</p>
+              <p className="text-sm text-muted-foreground">Penarikan Proses</p>
             </div>
             <p className="text-2xl font-bold mt-2 text-yellow-600">
               {formatCurrency(balance?.pending || 0)}
@@ -346,6 +369,10 @@ export default function EarningsPage() {
                 <li>Minimum penarikan Rp 100.000</li>
                 <li>Proses transfer 1-3 hari kerja</li>
                 <li>Platform memotong 10% dari setiap pembayaran proyek</li>
+                <li>
+                  <strong>Security Hold:</strong> Dana baru tersedia 5 hari setelah
+                  dilepas klien (perlindungan keamanan)
+                </li>
               </ul>
             </div>
           </div>
