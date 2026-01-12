@@ -89,7 +89,7 @@ export async function GET(request: Request) {
         where.hiredAnalystId = session.user.id;
         // Show all non-open statuses for active projects
         if (!status) {
-          where.status = { in: ['IN_PROGRESS', 'REVIEW', 'COMPLETED'] };
+          where.status = { in: ['IN_PROGRESS', 'COMPLETED'] };
         }
       } else {
         // Default: show open projects available for bidding

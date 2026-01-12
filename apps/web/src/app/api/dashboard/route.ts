@@ -111,12 +111,33 @@ export async function GET() {
             portfolioUrl: true,
           },
         }),
-        // Count active projects (where analyst is hired)
-        prisma.project.count({
+        // Get active projects (where analyst is hired)
+        prisma.project.findMany({
           where: {
             hiredAnalystId: userId,
             status: 'IN_PROGRESS',
           },
+          include: {
+            client: {
+              select: {
+                name: true,
+                image: true,
+              },
+            },
+            template: {
+              select: {
+                name: true,
+              },
+            },
+            milestones: {
+              select: {
+                id: true,
+                status: true,
+              },
+            },
+          },
+          orderBy: { hiredAt: 'desc' },
+          take: 10,
         }),
         // Count pending proposals
         prisma.proposal.count({
@@ -191,7 +212,7 @@ export async function GET() {
         success: true,
         data: {
           stats: {
-            activeProjects,
+            activeProjects: activeProjects.length,
             pendingProposals,
             completedProjects: analystProfile?.completedProjects || 0,
             totalEarnings: totalEarnings._sum.netAmount || 0,
@@ -200,6 +221,18 @@ export async function GET() {
           },
           profileCompletion,
           unreadMessages,
+          activeProjects: activeProjects.map((p) => ({
+            id: p.id,
+            title: p.title,
+            client: p.client.name,
+            clientImage: p.client.image,
+            template: p.template?.name,
+            budget: p.budgetMax,
+            status: p.status,
+            milestonesTotal: p.milestones.length,
+            milestonesCompleted: p.milestones.filter((m) => m.status === 'APPROVED').length,
+            hiredAt: p.hiredAt?.toISOString(),
+          })),
           availableProjects: availableProjects.map((p) => ({
             id: p.id,
             title: p.title,

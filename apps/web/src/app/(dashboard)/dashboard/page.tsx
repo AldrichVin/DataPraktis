@@ -59,10 +59,24 @@ interface AvailableProject {
   createdAt: string;
 }
 
+interface ActiveProject {
+  id: string;
+  title: string;
+  client: string;
+  clientImage: string | null;
+  template: string | null;
+  budget: number;
+  status: string;
+  milestonesTotal: number;
+  milestonesCompleted: number;
+  hiredAt: string | null;
+}
+
 interface AnalystDashboardData {
   stats: AnalystStats;
   profileCompletion: number;
   unreadMessages: number;
+  activeProjects: ActiveProject[];
   availableProjects: AvailableProject[];
 }
 
@@ -281,6 +295,7 @@ function AnalystDashboard() {
   };
   const profileCompletion = data?.profileCompletion || 0;
   const unreadMessages = data?.unreadMessages || 0;
+  const activeProjects = data?.activeProjects || [];
   const availableProjects = data?.availableProjects || [];
 
   return (
@@ -342,6 +357,65 @@ function AnalystDashboard() {
         </Card>
       </div>
 
+      {/* Active Projects */}
+      {activeProjects.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Proyek Aktif</CardTitle>
+                <CardDescription>Proyek yang sedang Anda kerjakan</CardDescription>
+              </div>
+              <Link href="/projects">
+                <Button variant="ghost" size="sm">
+                  Lihat Semua
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {activeProjects.map((project) => (
+                <div
+                  key={project.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border bg-primary/5"
+                >
+                  <div className="space-y-2">
+                    <Link
+                      href={`/workspace/${project.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {project.title}
+                    </Link>
+                    <p className="text-sm text-muted-foreground">
+                      Klien: {project.client}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{project.template || 'Custom'}</Badge>
+                      <Badge variant={project.status === 'IN_PROGRESS' ? 'default' : 'secondary'}>
+                        {project.status === 'IN_PROGRESS' ? 'Dikerjakan' : 'Review'}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className="font-semibold text-primary">
+                      {formatCurrency(project.budget)}
+                    </span>
+                    <div className="text-sm text-muted-foreground">
+                      Milestone: {project.milestonesCompleted}/{project.milestonesTotal}
+                    </div>
+                    <Link href={`/workspace/${project.id}`}>
+                      <Button size="sm">Buka Workspace</Button>
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Available Projects */}
       <Card>
         <CardHeader>
@@ -366,7 +440,7 @@ function AnalystDashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              {availableProjects.map((project) => (
+              {availableProjects.map((project: { id: string; title: string; client: string; budget: number; deadline: number | null; createdAt: string }) => (
                 <div
                   key={project.id}
                   className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border"
