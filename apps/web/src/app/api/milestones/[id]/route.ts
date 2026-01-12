@@ -135,17 +135,23 @@ export async function PATCH(
         );
       }
 
+      // Set auto-release to 14 days from now (professional standard)
+      const autoReleaseDate = new Date();
+      autoReleaseDate.setDate(autoReleaseDate.getDate() + 14);
+
       await prisma.milestone.update({
         where: { id: params.id },
         data: {
           status: 'SUBMITTED',
           submittedAt: new Date(),
+          autoReleaseAt: autoReleaseDate,
         },
       });
 
       return NextResponse.json({
         success: true,
-        message: 'Milestone berhasil disubmit untuk review',
+        message: 'Milestone berhasil disubmit untuk review. Klien memiliki 14 hari untuk mereview.',
+        autoReleaseAt: autoReleaseDate.toISOString(),
       });
     }
 
@@ -167,12 +173,13 @@ export async function PATCH(
       }
 
       await prisma.$transaction(async (tx) => {
-        // Approve current milestone
+        // Approve current milestone and clear auto-release timer
         await tx.milestone.update({
           where: { id: params.id },
           data: {
             status: 'APPROVED',
             approvedAt: new Date(),
+            autoReleaseAt: null, // Clear auto-release since client took action
           },
         });
 
@@ -251,6 +258,7 @@ export async function PATCH(
         data: {
           status: 'REVISION_REQUESTED',
           revisionCount: { increment: 1 },
+          autoReleaseAt: null, // Clear auto-release - will reset on resubmit
         },
       });
 
