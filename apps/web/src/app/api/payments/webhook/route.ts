@@ -131,11 +131,16 @@ async function handleSuccessfulPayment(
       include: { milestone: true },
     });
 
-    // If milestone is pending, start it
+    // If milestone is pending, mark as funded and start work
+    // Professional flow: PENDING → FUNDED → IN_PROGRESS
+    // We auto-transition to IN_PROGRESS so analyst can start immediately
     if (transaction?.milestone?.status === 'PENDING') {
       await tx.milestone.update({
         where: { id: transaction.milestone.id },
-        data: { status: 'IN_PROGRESS' },
+        data: {
+          status: 'IN_PROGRESS',
+          fundedAt: new Date(), // NEW: Track when milestone was funded
+        },
       });
     }
   });

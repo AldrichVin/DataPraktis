@@ -21,10 +21,13 @@ import {
   Star,
   Upload,
   User,
+  Wallet,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FileUpload } from '@/components/files/file-upload';
+import { FundMilestoneModal } from '@/components/workspace/fund-milestone-modal';
+import { MilestoneStatusBadge } from '@/components/workspace/milestone-status-badge';
 
 interface Proposal {
   id: string;
@@ -60,6 +63,7 @@ interface Milestone {
   status: string;
   dueDate: string | null;
   sortOrder: number;
+  fundedAt: string | null;
 }
 
 interface Project {
@@ -127,6 +131,14 @@ export default function ProjectDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Funding modal state
+  const [fundingModalOpen, setFundingModalOpen] = useState(false);
+  const [pendingFunding, setPendingFunding] = useState<{
+    milestoneId: string;
+    milestoneAmount: number;
+    milestoneName: string;
+  } | null>(null);
+
   const projectId = params.id as string;
 
   useEffect(() => {
@@ -171,10 +183,25 @@ export default function ProjectDetailPage() {
         throw new Error(data.error || 'Failed to update proposal');
       }
 
-      toast({
-        title: action === 'accept' ? 'Proposal Diterima!' : 'Proposal Ditolak',
-        description: data.message,
-      });
+      // If proposal accepted and requires funding, open the funding modal
+      if (action === 'accept' && data.requiresFunding) {
+        setPendingFunding({
+          milestoneId: data.firstMilestoneId,
+          milestoneAmount: data.firstMilestoneAmount,
+          milestoneName: 'Milestone 1',
+        });
+        setFundingModalOpen(true);
+
+        toast({
+          title: 'Proposal Diterima!',
+          description: 'Silakan danai milestone pertama untuk memulai proyek.',
+        });
+      } else {
+        toast({
+          title: action === 'accept' ? 'Proposal Diterima!' : 'Proposal Ditolak',
+          description: data.message,
+        });
+      }
 
       // Refresh project data
       const refreshRes = await fetch(`/api/projects/${projectId}`);
@@ -295,9 +322,10 @@ export default function ProjectDetailPage() {
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
                           <h4 className="font-medium">{milestone.title}</h4>
-                          <Badge variant="outline">
-                            {milestoneStatusLabels[milestone.status]}
-                          </Badge>
+                          <MilestoneStatusBadge
+                            status={milestone.status as 'PENDING' | 'FUNDED' | 'IN_PROGRESS' | 'SUBMITTED' | 'REVISION_REQUESTED' | 'APPROVED' | 'DISPUTED'}
+                            fundedAt={milestone.fundedAt}
+                          />
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
                           {milestone.description}
@@ -541,6 +569,18 @@ export default function ProjectDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Funding Modal */}
+      {pendingFunding && (
+        <FundMilestoneModal
+          open={fundingModalOpen}
+          onOpenChange={setFundingModalOpen}
+          milestoneId={pendingFunding.milestoneId}
+          milestoneAmount={pendingFunding.milestoneAmount}
+          projectId={projectId}
+          milestoneName={pendingFunding.milestoneName}
+        />
+      )}
     </div>
   );
 }

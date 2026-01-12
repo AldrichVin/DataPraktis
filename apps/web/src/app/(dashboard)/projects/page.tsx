@@ -56,7 +56,7 @@ const statusColors: Record<string, 'default' | 'secondary' | 'success' | 'destru
 };
 
 export default function ProjectsPage() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjects, setActiveProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,8 +67,14 @@ export default function ProjectsPage() {
 
   const isClient = session?.user?.role === 'CLIENT';
   const isAnalyst = session?.user?.role === 'ANALYST';
+  const isSessionLoaded = sessionStatus === 'authenticated';
 
   useEffect(() => {
+    // Wait for session to be loaded before fetching
+    if (!isSessionLoaded) {
+      return;
+    }
+
     async function fetchProjects() {
       try {
         // For clients: fetch their projects
@@ -106,7 +112,7 @@ export default function ProjectsPage() {
 
     fetchProjects();
     fetchActiveProjects();
-  }, [isAnalyst]);
+  }, [isSessionLoaded, isAnalyst]);
 
   // Filter function for both project lists
   const filterProjects = (projectList: Project[]) => {
