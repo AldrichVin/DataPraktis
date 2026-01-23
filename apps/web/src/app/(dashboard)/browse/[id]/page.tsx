@@ -22,8 +22,8 @@ import {
   Plus,
   Send,
   Trash2,
-  User,
 } from 'lucide-react';
+import { TemplateAnswersDisplay } from '@/components/projects/template-answers-display';
 
 interface Milestone {
   title: string;
@@ -42,6 +42,14 @@ interface ExistingProposal {
   createdAt: string;
 }
 
+interface TemplateQuestion {
+  id: string;
+  type: 'select' | 'multiselect' | 'text' | 'textarea';
+  label: string;
+  options?: Array<{ value: string; label: string }>;
+  required?: boolean;
+}
+
 interface Project {
   id: string;
   title: string;
@@ -55,6 +63,9 @@ interface Project {
   template: {
     name: string;
     slug: string;
+    icon?: string;
+    questions?: TemplateQuestion[];
+    exampleDeliverables?: Array<{ title: string; description: string }>;
   } | null;
   client: {
     id: string;
@@ -261,6 +272,16 @@ export default function BrowseProjectDetailPage() {
               <p className="whitespace-pre-wrap">{project.description}</p>
             </CardContent>
           </Card>
+
+          {/* Template Answers - Help analysts understand client needs */}
+          {project.template?.questions && project.templateAnswers && (
+            <TemplateAnswersDisplay
+              templateName={project.template.name}
+              templateQuestions={project.template.questions}
+              answers={project.templateAnswers}
+              defaultExpanded={true}
+            />
+          )}
 
           {/* Existing Proposal */}
           {existingProposal && (

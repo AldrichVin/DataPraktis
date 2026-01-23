@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { ReviewForm } from '@/components/reviews/review-form';
 import { ReviewList } from '@/components/reviews/review-list';
+import { TemplateAnswersDisplay } from '@/components/projects/template-answers-display';
 
 interface Milestone {
   id: string;
@@ -49,6 +50,14 @@ interface Milestone {
   approvedAt: string | null;
 }
 
+interface TemplateQuestion {
+  id: string;
+  type: 'select' | 'multiselect' | 'text' | 'textarea';
+  label: string;
+  options?: Array<{ value: string; label: string }>;
+  required?: boolean;
+}
+
 interface Project {
   id: string;
   title: string;
@@ -57,12 +66,15 @@ interface Project {
   budgetMin: number;
   budgetMax: number;
   deadline: string | null;
+  templateAnswers: Record<string, unknown> | null;
   createdAt: string;
   hiredAt: string | null;
   completedAt: string | null;
   template: {
     name: string;
     slug: string;
+    icon?: string;
+    questions?: TemplateQuestion[];
   } | null;
   client: {
     id: string;
@@ -525,6 +537,16 @@ export default function WorkspacePage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Template Answers - Reference for analyst */}
+          {project.template?.questions && project.templateAnswers && (
+            <TemplateAnswersDisplay
+              templateName={project.template.name}
+              templateQuestions={project.template.questions}
+              answers={project.templateAnswers}
+              defaultExpanded={false}
+            />
+          )}
 
           {/* Quick Actions */}
           <Card>
