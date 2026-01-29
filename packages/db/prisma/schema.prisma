@@ -150,6 +150,10 @@ model AnalystProfile {
   completedProjects  Int      @default(0)
   responseTimeHours  Int?     // Average response time
 
+  // Earnings (denormalized for quick access)
+  balance            Int      @default(0) // Available balance in IDR
+  totalEarnings      Int      @default(0) // Total lifetime earnings in IDR
+
   // Banking
   bankName           String?
   bankAccountNumber  String?
