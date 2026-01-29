@@ -70,7 +70,7 @@ export async function GET(request: Request) {
     });
 
     const templateIds = topTemplates
-      .map((t) => t.templateId)
+      .map((t: { templateId: string | null; _count: number }) => t.templateId)
       .filter((id): id is string => id !== null);
 
     const templates = await prisma.template.findMany({
@@ -78,9 +78,9 @@ export async function GET(request: Request) {
       select: { id: true, name: true },
     });
 
-    const topTemplatesWithNames = topTemplates.map((t) => ({
+    const topTemplatesWithNames = topTemplates.map((t: { templateId: string | null; _count: number }) => ({
       templateId: t.templateId,
-      name: templates.find((temp) => temp.id === t.templateId)?.name || 'No Template',
+      name: templates.find((temp: { id: string; name: string }) => temp.id === t.templateId)?.name || 'No Template',
       count: t._count,
     }));
 
@@ -153,7 +153,7 @@ export async function GET(request: Request) {
           ...data,
         })),
         topTemplates: topTemplatesWithNames,
-        topAnalysts: topAnalysts.map((a) => ({
+        topAnalysts: topAnalysts.map((a: { user: { id: string; name: string | null; image: string | null }; completedProjects: number; rating: number }) => ({
           ...a.user,
           completedProjects: a.completedProjects,
           rating: a.rating,
