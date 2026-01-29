@@ -82,7 +82,7 @@ export async function GET(
 
     // Find the other participant
     const otherParticipant = conversation.participants.find(
-      (p) => p.userId !== session.user.id
+      (p: { userId: string }) => p.userId !== session.user.id
     );
 
     return NextResponse.json({
